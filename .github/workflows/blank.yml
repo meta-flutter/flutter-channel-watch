@@ -35,7 +35,7 @@ jobs:
       - name: Get beta channel engine version
         run: |
           wget -O beta https://raw.githubusercontent.com/flutter/flutter/beta/bin/internal/engine.version
-          cat engine.version
+          ls -la
 
       - name: Setup git
         run: |
