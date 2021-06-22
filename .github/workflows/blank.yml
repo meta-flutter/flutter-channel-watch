@@ -4,6 +4,9 @@ name: CI
 
 # Controls when the action will run. 
 on:
+  # Check every 15 minutes
+  schedule:    
+    - cron: "*/15 * * * *"
   # Triggers the workflow on push or pull request events but only for the main branch
   push:
     branches: [ main ]
@@ -25,12 +28,17 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      - name: Config git
+      - name: Clean Failed Runs
         run: |
-          pwd
-          git config --global user.email "joel.winarske@gmail.com"
-          git config --global user.name "Joel Winarske"
-          env
+          FAILED_JOBS=`curl -u jwinarske:${{ secrets.API_TOKEN }} -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/jwinarske/flutter-channel-watch/actions/runs | \
+            jq -r '.workflow_runs[] | \
+            select(.head_branch != "master" and .conclusion == "failure") | \
+            "\(.id)"'`
+          for i in ${FAILED_JOBS}; do
+            curl -X DELETE -u jwinarske:${{ secrets.API_TOKEN }} -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/jwinarske/flutter-channel-watch/actions/runs/$i
+          done
 
       - name: Get beta channel engine version
         run: |
@@ -42,6 +50,9 @@ jobs:
 
       - name: Setup git
         run: |
+          env
+          git config --global user.email "joel.winarske@gmail.com"
+          git config --global user.name "Joel Winarske"
           which ssh-agent || (apt-get update -y && apt-get install openssh-client -y)
           eval $(ssh-agent -s)
           echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' | ssh-add -
@@ -49,9 +60,8 @@ jobs:
           chmod 700 $HOME/.ssh
           echo ${{ secrets.SSH_KNOWN_HOSTS }} | >> $HOME/.ssh/known_hosts
           chmod 644 $HOME/.ssh/known_hosts
-          git remote set-url origin "git@github.com:jwinarske/flutter-channel-watch.git"
-          ssh -T git@github.com
-          
+          git remote -v
+
       - name: Check Roll
         run: |
           if git diff-index --quiet HEAD --; then
