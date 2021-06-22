@@ -47,7 +47,6 @@ jobs:
           echo ${{ secrets.SSH_KNOWN_HOSTS }} | >> $HOME/.ssh/known_hosts
           chmod 644 $HOME/.ssh/known_hosts
           git remote set-url origin "git@github.com:jwinarske/flutter-channel-watch.git"
-          ssh -T git@github.com
           
       - name: Check Roll
         run: |
