@@ -46,7 +46,6 @@ jobs:
           chmod 700 $HOME/.ssh
           echo ${{ secrets.SSH_KNOWN_HOSTS }} | >> $HOME/.ssh/known_hosts
           chmod 644 $HOME/.ssh/known_hosts
-          git remote add origin git@github.com:jwinarske/flutter-channel-watch.git
           git remote -v
           
       - name: Check Roll
