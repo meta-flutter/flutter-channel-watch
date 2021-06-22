@@ -27,7 +27,7 @@ jobs:
 
       - name: Config GIT
         run: |
-          cd flutter-channel-watch
+          pwd
           git config --global user.email "joel.winarske@gmail.com"
           git config --global user.name "Joel Winarske"
           env
