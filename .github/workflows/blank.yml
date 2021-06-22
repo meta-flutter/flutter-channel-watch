@@ -39,13 +39,14 @@ jobs:
 
       - name: Setup git
         run: |
-          which ssh-agent || (apt-get update -y && apt-get install openssh-client -y)
-          eval $(ssh-agent -s)
-          echo "$SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+          which base64 || (apt-get update -y && apt-get install base64 -y)
           mkdir -p $HOME/.ssh
           chmod 700 $HOME/.ssh
           echo $SSH_KNOWN_HOSTS | base64 -d >> $HOME/.ssh/known_hosts
           chmod 644 $HOME/.ssh/known_hosts
+          which ssh-agent || (apt-get update -y && apt-get install openssh-client -y)
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
           git remote set-url origin "git@github.com:jwinarske/flutter-channel-watch.git"
           
       - name: Check Roll
