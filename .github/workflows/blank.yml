@@ -35,6 +35,10 @@ jobs:
           git config --global user.name "Joel Winarske"
           env
 
+      - name: Get Runs
+        run: |
+          gh api repos/jwinarske/flutter-channel-watch/actions/runs
+
       - name: Get beta channel engine version
         run: |
           wget -O beta https://raw.githubusercontent.com/flutter/flutter/beta/bin/internal/engine.version
@@ -61,7 +65,3 @@ jobs:
               git commit -m "Roll"
               git push
           fi
-
-      - name: Get Runs
-        run: |
-          gh api repos/jwinarske/flutter-channel-watch/actions/runs
