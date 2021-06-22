@@ -25,15 +25,23 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      # Runs a single command using the runners shell
-      - name: Get beta channel engine version
-        run: wget -O beta https://raw.githubusercontent.com/flutter/flutter/beta/bin/internal/engine.version
+      - name: Config GIT
+        run: |
+          cd flutter-channel-watch
+          git config --global user.email "joel.winarske@gmail.com"
+          git config --global user.name "Joel Winarske"
+          env
 
-      # Runs a set of commands using the runners shell
+      - name: Get beta channel engine version
+        run: |
+          wget -O beta https://raw.githubusercontent.com/flutter/flutter/beta/bin/internal/engine.version
+          cat engine.version
+
       - name: Setup git
         run: |
+          which ssh-agent || (apt-get update -y && apt-get install openssh-client -y)
           eval $(ssh-agent -s)
-          echo "$SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+          echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
           mkdir -p $HOME/.ssh
           chmod 700 $HOME/.ssh
           echo $SSH_KNOWN_HOSTS | base64 -d >> $HOME/.ssh/known_hosts
