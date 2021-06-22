@@ -1,0 +1,52 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the action will run. 
+on:
+  # Triggers the workflow on push or pull request events but only for the main branch
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: alpine-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      # Runs a single command using the runners shell
+      - name: Get beta channel engine version
+        run: wget -O beta https://raw.githubusercontent.com/flutter/flutter/beta/bin/internal/engine.version
+
+      # Runs a set of commands using the runners shell
+      - name: Setup git
+        run: |
+          eval $(ssh-agent -s)
+          echo "$SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+          mkdir -p $HOME/.ssh
+          chmod 700 $HOME/.ssh
+          echo $SSH_KNOWN_HOSTS | base64 -d >> $HOME/.ssh/known_hosts
+          chmod 644 $HOME/.ssh/known_hosts
+          git remote set-url origin "git@github.com:jwinarske/flutter-channel-watch.git"
+          
+      - name: Check Roll
+        run: |
+          if git diff-index --quiet HEAD --; then
+              echo "No changes" | false
+          else
+              echo "Delta"
+              git add .
+              git commit -m "Roll"
+              git push
+          fi
