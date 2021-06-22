@@ -41,10 +41,10 @@ jobs:
         run: |
           which ssh-agent || (apt-get update -y && apt-get install openssh-client -y)
           eval $(ssh-agent -s)
-          echo "$GITHUB_SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d | tr -d '\r' | ssh-add -
           mkdir -p $HOME/.ssh
           chmod 700 $HOME/.ssh
-          echo $GITHUB_SSH_KNOWN_HOSTS | base64 -d >> $HOME/.ssh/known_hosts
+          echo ${{ secrets.SSH_KNOWN_HOSTS }} | base64 -d >> $HOME/.ssh/known_hosts
           chmod 644 $HOME/.ssh/known_hosts
           git remote set-url origin "git@github.com:jwinarske/flutter-channel-watch.git"
           
