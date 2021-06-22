@@ -35,9 +35,17 @@ jobs:
           git config --global user.name "Joel Winarske"
           env
 
-      - name: Get Runs
+      - name: Clean Failed Runs
         run: |
-          gh api repos/jwinarske/flutter-channel-watch/actions/runs
+          FAILED_JOBS=`curl -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/jwinarske/flutter-channel-watch/actions/runs | \
+            jq -r '.workflow_runs[] | \
+            select(.head_branch != "master" and .conclusion == "failure") | \
+            "\(.id)"'`
+          for i in ${FAILED_JOBS}; do
+            curl -X DELETE -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/jwinarske/flutter-channel-watch/actions/runs/$i
+          done
 
       - name: Get beta channel engine version
         run: |
