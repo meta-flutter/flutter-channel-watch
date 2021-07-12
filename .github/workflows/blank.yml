@@ -42,8 +42,6 @@ jobs:
 
       - name: Get flutter engine.version for each channel
         run: |
-          wget -O master https://raw.githubusercontent.com/flutter/flutter/master/bin/internal/engine.version
-          wget -O dev https://raw.githubusercontent.com/flutter/flutter/dev/bin/internal/engine.version
           wget -O beta https://raw.githubusercontent.com/flutter/flutter/beta/bin/internal/engine.version
           wget -O stable https://raw.githubusercontent.com/flutter/flutter/stable/bin/internal/engine.version
           ls -la
