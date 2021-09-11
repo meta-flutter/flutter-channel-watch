@@ -72,5 +72,5 @@ jobs:
               curl -X POST https://api.github.com/repos/jwinarske/flutter_embedded/dispatches \
               -H 'Accept: application/vnd.github.everest-preview+json' \
               -u ${{ secrets.ACCESS_TOKEN }} \
-              -d '{"event_type": "trigger_build"}'
+              -d '{"event_type": "channel_roll"}'
           fi
