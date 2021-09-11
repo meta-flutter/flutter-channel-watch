@@ -69,4 +69,8 @@ jobs:
               git add .
               git commit -m "Roll"
               git push
+              curl -X POST https://api.github.com/repos/jwinarske/flutter_embedded/dispatches \
+              -H 'Accept: application/vnd.github.everest-preview+json' \
+              -u ${{ secrets.ACCESS_TOKEN }} \
+              -d '{"event_type": "trigger_build"}'
           fi
