@@ -26,7 +26,7 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Clean Failed Runs
         run: |
@@ -42,8 +42,6 @@ jobs:
 
       - name: Get flutter engine.version for each channel
         run: |
-          wget -O master https://raw.githubusercontent.com/flutter/flutter/master/bin/internal/engine.version
-          wget -O beta https://raw.githubusercontent.com/flutter/flutter/beta/bin/internal/engine.version
           wget -O stable https://raw.githubusercontent.com/flutter/flutter/stable/bin/internal/engine.version
           ls -la
 
