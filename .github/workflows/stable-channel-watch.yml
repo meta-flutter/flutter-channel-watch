@@ -1,87 +1,136 @@
-# This is a basic workflow to help you get started with Actions
+# Watch the Flutter stable channel and tell the things that depend on it.
+#
+# Two signals, because they are two different things. bin/internal/engine.version
+# is the engine SRCREV the flutter-engine builds take. meta-flutter pins
+# FLUTTER_SDK_TAG to a version string resolved out of releases_linux.json. The
+# engine can move without a release existing in the feed the layer reads, and a
+# roll dispatched on an engine SHA has no version to pin.
+#
+# No change is a green no-op. The previous version made it `echo | false`, so a
+# healthy watcher was red on almost every run and a dead one looked identical --
+# which is how this sat disabled for four and a half months without anyone
+# noticing. Red here means something is actually wrong.
 
-name: CI
+name: stable-channel-watch
 
-# Controls when the action will run. 
 on:
-  # Check every 15 minutes
-  schedule:    
+  schedule:
+    # Best effort on GitHub's side; treat it as "about every 15 minutes".
     - cron: "*/15 * * * *"
-  # Triggers the workflow on push or pull request events but only for the main branch
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+# A slow API call must not let one run overlap the next and double-dispatch.
+concurrency:
+  group: stable-channel-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  watch:
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
-      - name: Clean Failed Runs
+      - name: Read the channel
+        id: read
         run: |
-          FAILED_JOBS=`curl -u ${{ secrets.USER }}:${{ secrets.API_TOKEN }} -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/meta-flutter/flutter-channel-watch/actions/runs | \
-            jq -r '.workflow_runs[] | \
-            select(.head_branch != "master" and .conclusion == "failure") | \
-            "\(.id)"'`
-          for i in ${FAILED_JOBS}; do
-            curl -X DELETE -u ${{ secrets.USER }}:${{ secrets.API_TOKEN }} -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/meta-flutter/flutter-channel-watch/actions/runs/$i
-          done
+          set -euo pipefail
 
-      - name: Get flutter engine.version for each channel
-        run: |
-          wget -O stable https://raw.githubusercontent.com/flutter/flutter/stable/bin/internal/engine.version
-          ls -la
-
-      - name: Setup git
-        run: |
-          env
-          git config --global user.email "joel.winarske@gmail.com"
-          git config --global user.name "Joel Winarske"
-          which ssh-agent || (apt-get update -y && apt-get install openssh-client -y)
-          eval $(ssh-agent -s)
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' | ssh-add -
-          mkdir -p $HOME/.ssh
-          chmod 700 $HOME/.ssh
-          echo ${{ secrets.SSH_KNOWN_HOSTS }} | >> $HOME/.ssh/known_hosts
-          chmod 644 $HOME/.ssh/known_hosts
-          git remote -v
-
-      - name: Check Roll
-        run: |
-          if git diff-index --quiet HEAD --; then
-              echo "No changes" | false
-          else
-              echo "Delta"
-              git add .
-              git commit -m "Roll"
-              git push
-              export srcrev=$(cat stable)
-              curl -L -X POST \
-                -H "Accept:application/vnd.github+json" \
-                -H "Authorization:Bearer ${{ secrets.WORKFLOW }}" \
-                -H "X-GitHub-Api-Version:2022-11-28" https://api.github.com/repos/meta-flutter/flutter-engine/actions/workflows/flutter-engine-x86_64.yaml/dispatches \
-                -d '{"ref":"main","inputs":{"srcrev":"'"${srcrev}"'","release": true}}'
-              curl -L -X POST \
-                -H "Accept:application/vnd.github+json" \
-                -H "Authorization:Bearer ${{ secrets.WORKFLOW }}" \
-                -H "X-GitHub-Api-Version:2022-11-28" https://api.github.com/repos/meta-flutter/flutter-engine/actions/workflows/flutter-engine-arm64.yaml/dispatches \
-                -d '{"ref":"main","inputs":{"srcrev":"'"${srcrev}"'","release": true}}'
-              curl -L -X POST \
-                -H "Accept:application/vnd.github+json" \
-                -H "Authorization:Bearer ${{ secrets.WORKFLOW }}" \
-                -H "X-GitHub-Api-Version:2022-11-28" https://api.github.com/repos/meta-flutter/flutter-engine/actions/workflows/flutter-engine-armv7hf.yaml/dispatches \
-                -d '{"ref":"main","inputs":{"srcrev":"'"${srcrev}"'","release": true}}'
+          # Never write a state file straight from the network. `wget -O` truncates
+          # the destination before it knows whether the request succeeded, so a 404
+          # or a storage blip leaves the file empty or holding an HTML error page --
+          # which reads as a change and dispatches builds with a garbage srcrev.
+          # Fetch to a temporary file, validate, and only then move it into place.
+          curl --fail --show-error --silent --retry 3 --retry-delay 5 --max-time 30 \
+            -o engine.new \
+            https://raw.githubusercontent.com/flutter/flutter/stable/bin/internal/engine.version
+          if ! grep -Eq '^[0-9a-f]{40}$' engine.new; then
+            echo "::error::engine.version is not a sha1: $(head -c 120 engine.new)"
+            exit 1
           fi
+
+          curl --fail --show-error --silent --retry 3 --retry-delay 5 --max-time 60 \
+            -o releases.json \
+            https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json
+          # jq, not a python heredoc: a heredoc terminator cannot be indented,
+          # and everything in a YAML block scalar is.
+          version=$(jq -r \
+            '.current_release.stable as $h | .releases[] | select(.hash == $h) | .version' \
+            releases.json | head -1)
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::stable version is not x.y.z: $version"
+            exit 1
+          fi
+
+          engine=$(cat engine.new)
+          echo "engine=$engine" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          engine_changed=false
+          version_changed=false
+          [ -f stable ]         && [ "$(cat stable)" = "$engine" ]          || engine_changed=true
+          [ -f stable-version ] && [ "$(cat stable-version)" = "$version" ] || version_changed=true
+          echo "engine_changed=$engine_changed" >> "$GITHUB_OUTPUT"
+          echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
+
+          echo "engine.version  $engine  (changed: $engine_changed)"
+          echo "stable release  $version  (changed: $version_changed)"
+
+          mv engine.new stable
+          printf '%s\n' "$version" > stable-version
+          rm -f releases.json
+
+      - name: Record the check
+        id: record
+        run: |
+          set -euo pipefail
+
+          # GitHub disables scheduled workflows after 60 days without repository
+          # activity, and that is exactly what stopped this one: last commit
+          # 2026-04-16, last run 2026-06-15. A commit a day is enough activity to
+          # stay under that, quiet enough to ignore, and doubles as the liveness
+          # signal -- if last-checked is stale, the watch is dead.
+          today=$(date -u +%Y-%m-%d)
+          heartbeat=false
+          if [ ! -f last-checked ] || [ "$(cut -c1-10 last-checked)" != "$today" ]; then
+            heartbeat=true
+          fi
+          date -u +%Y-%m-%dT%H:%M:%SZ > last-checked
+
+          if [ "${{ steps.read.outputs.engine_changed }}" = "true" ] \
+            || [ "${{ steps.read.outputs.version_changed }}" = "true" ] \
+            || [ "$heartbeat" = "true" ]; then
+            git config user.name "Joel Winarske"
+            git config user.email "joel.winarske@gmail.com"
+            git add stable stable-version last-checked
+            if git diff --cached --quiet; then
+              echo "nothing to commit"
+            else
+              git commit -m "Roll: engine ${{ steps.read.outputs.engine }}, stable ${{ steps.read.outputs.version }}"
+              git push
+            fi
+          else
+            git checkout -- . || true
+            echo "no change and already checked in today"
+          fi
+
+      - name: Dispatch flutter-engine
+        if: steps.read.outputs.engine_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW }}
+          SRCREV: ${{ steps.read.outputs.engine }}
+        run: |
+          set -euo pipefail
+          # --fail-with-body, because these were fire-and-forget: an expired token
+          # returns 401 and the run went green anyway.
+          for arch in x86_64 arm64 armv7hf; do
+            echo "dispatching flutter-engine-$arch for $SRCREV"
+            gh api --method POST \
+              "repos/meta-flutter/flutter-engine/actions/workflows/flutter-engine-$arch.yaml/dispatches" \
+              -f ref=main \
+              -F "inputs[srcrev]=$SRCREV" \
+              -F "inputs[release]=true"
+          done
