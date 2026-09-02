@@ -125,9 +125,9 @@ The unquoted secret interpolation is also an injection surface. Delete it.
 Commit `last-checked` when the UTC date changes. Keeps the cron alive and
 makes staleness visible.
 
-### 7. Dispatch the meta-flutter roll
+### 7. Dispatch the meta-flutter roll — done
 
-New, gated on `version_changed`:
+Gated on `version_changed`:
 
 ```sh
 gh api repos/meta-flutter/meta-flutter/dispatches \
@@ -150,17 +150,21 @@ red instead of passing silently.
 
 Items 1, 3, and 6 are the ones that would have caught the outage.
 
-## On the meta-flutter side
+## On the meta-flutter side — done
 
-Tracked in meta-flutter#864. Blocking prerequisite: **meta-flutter#863** —
-`roll_meta_flutter.py` submits its per-app work to a `ThreadPoolExecutor` and
-never reads the futures, so a failed clone or a license mismatch is captured
-and discarded and the script exits 0. Unattended rolling is not safe until the
-roll can fail.
+meta-flutter#863 is fixed: the roll reads its futures, reports every failure and
+exits non-zero. It also gates apps the pinned SDK cannot satisfy, explains where
+each vendored lockfile came from, and regenerates the recipes for the SDK's own
+example apps.
 
-Also open there: which branch rolls first (convention is wrynose, but the
-tooling and the richest CI are on master), and how the roll job gets a Flutter
-SDK at the version it has only just determined.
+meta-flutter#864 answered both open questions. Master rolls first, contrary to
+the usual wrynose-first order, because a roll is generated content and master
+has the CI to catch a bad one -- and because master is the only branch whose
+roll tooling has any of the above. The SDK question resolved by making the
+version an input rather than something the roll discovers, which is why the
+dispatch above carries it.
+
+The roll stages a draft pull request. Nothing merges on its own.
 
 ## Alternative considered
 
@@ -176,9 +180,13 @@ activity is the trigger itself.
 
 ## Order
 
-1 → 2 → 3 → 6 first: that is the outage, and it is self-contained.
-Then 4, 5, 8, 9 as cleanup.
-7 last, once meta-flutter#863 has landed and the roll workflow exists.
+All done. 1, 2, 3 and 6 went in together as the outage fix; 4, 5, 8 and 9 with
+them; 7 last, once meta-flutter#863 had landed and the roll workflow existed.
+
+What remains is not code: the `WORKFLOW` secret is expired, so the engine
+dispatch will fail on the next real change. The watch is green today only
+because nothing has moved since it was fixed -- which is the failure mode this
+plan was written about, in a different place.
 
 Re-enable the workflow by hand after the first commit lands
 (`gh workflow enable`); a repo disabled for inactivity does not resume on its

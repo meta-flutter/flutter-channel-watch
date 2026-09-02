@@ -134,3 +134,27 @@ jobs:
               -F "inputs[srcrev]=$SRCREV" \
               -F "inputs[release]=true"
           done
+
+      - name: Dispatch the meta-flutter roll
+        if: steps.read.outputs.version_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW }}
+          VERSION: ${{ steps.read.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Held back until the roll could be trusted to run unattended. It can
+          # now: it fails rather than exiting 0 with recipes missing, skips apps
+          # the pinned SDK cannot satisfy and says why, and regenerates the
+          # SDK's own app recipes. See meta-flutter/meta-flutter#864.
+          #
+          # The version goes with the dispatch because the roll needs the SDK it
+          # is rolling *to* on PATH before it runs -- an app that vendors its pub
+          # cache resolves its lockfile against it -- and that is not knowable
+          # from inside the roll until the pin has already moved.
+          #
+          # This stages a draft pull request. Nothing merges on its own.
+          echo "dispatching a meta-flutter roll to $VERSION"
+          gh api --method POST \
+            "repos/meta-flutter/meta-flutter/dispatches" \
+            -f event_type=flutter-stable-roll \
+            -F "client_payload[version]=$VERSION"
